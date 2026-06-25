@@ -161,7 +161,7 @@ function LoginScreen({ onLogin }) {
 }
 
 // ── 物品一覧タブ ─────────────────────────────────────────────
-function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem, onImportXlsx }) {
+function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeNote, onAddItem, onImportXlsx }) {
   const [statusFilter, setStatusFilter] = useState("すべて");
   const [showAdd, setShowAdd] = useState(false);
   const [newItem, setNewItem] = useState({ id: "", name: "", category: "" });
@@ -315,7 +315,31 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
                         </div>
                       ) : <span style={{ color: C.gray300 }}>—</span>}
                     </td>
-                    <td style={{ ...s.td, color: C.gray500, fontSize: 12 }}>{item.note || "—"}</td>
+                   <td style={{ ...s.td, fontSize: 12 }}>
+                      {user.role === "管理者" && editStatus?.id === item.id + "_note" ? (
+                        <div style={s.row}>
+                          <input
+                            style={{ ...s.input, padding: "4px 8px", fontSize: 12 }}
+                            value={editStatus.note}
+                            onChange={e => setEditStatus({ ...editStatus, note: e.target.value })}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") { onChangeNote(item.id, editStatus.note); setEditStatus(null); }
+                              if (e.key === "Escape") setEditStatus(null);
+                            }}
+                            autoFocus
+                          />
+                          <button style={s.btn("success", "sm")} onClick={() => { onChangeNote(item.id, editStatus.note); setEditStatus(null); }}>✓</button>
+                          <button style={s.btn("outline", "sm")} onClick={() => setEditStatus(null)}>✕</button>
+                        </div>
+                      ) : (
+                        <div style={s.row}>
+                          <span style={{ color: item.note ? C.gray700 : C.gray300 }}>{item.note || "—"}</span>
+                          {user.role === "管理者" && (
+                            <button style={{ ...s.btn("outline", "sm"), fontSize: 11 }} onClick={() => setEditStatus({ id: item.id + "_note", note: item.note || "" })}>編集</button>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td style={s.td}>
                       {user.role !== "管理者" && item.status === "利用可能" && (
                         <button style={s.btn("primary", "sm")} onClick={() => onRequestLoan(item)}>申請</button>
@@ -618,6 +642,17 @@ export default function App() {
     }
   };
 
+  const handleChangeNote = async (itemId, note) => {
+    const newItems = items.map(i => i.id === itemId ? { ...i, note } : i);
+    try {
+      await setDoc(doc(db, "appData", "main"), { items: newItems, loans });
+      showToast("備考を更新しました。");
+    } catch (e) {
+      console.error(e);
+      showToast("保存に失敗しました。", "error");
+    }
+  };
+
   const handleChangeStatus = async (itemId, newStatus) => {
     const prevItem = items.find(i => i.id === itemId);
     const newItems = items.map(i => i.id === itemId ? { ...i, status: newStatus } : i);
@@ -706,7 +741,7 @@ export default function App() {
           </div>
         )}
         {tab === "ダッシュボード" && <Dashboard items={items} loans={loans} />}
-        {tab === "物品一覧" && <ItemsTab items={items} loans={loans} user={user} onRequestLoan={setLoanTarget} onChangeStatus={handleChangeStatus} onAddItem={handleAddItem} onImportXlsx={handleImportXlsx} />}
+       {tab === "物品一覧" && <ItemsTab items={items} loans={loans} user={user} onRequestLoan={setLoanTarget} onChangeStatus={handleChangeStatus} onChangeNote={handleChangeNote} onAddItem={handleAddItem} onImportXlsx={handleImportXlsx} />}
         {tab === "申請管理" && user.role === "管理者" && <RequestsTab loans={loans} onApprove={handleApprove} onReject={setRejectTarget} onReturn={handleReturn} user={user} />}
         {tab === "マイ申請" && user.role !== "管理者" && <MyRequestsTab loans={loans} user={user} />}
       </main>
