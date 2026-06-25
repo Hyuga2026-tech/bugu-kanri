@@ -556,10 +556,16 @@ export default function App() {
 
   const handleReturn = async (loanId) => {
     const loan = loans.find(l => l.id === loanId);
+    if (!loan) { showToast("申請データが見つかりません。", "error"); return; }
     const newLoans = loans.map(l => l.id === loanId ? { ...l, returned: true } : l);
-    const newItems = items.map(i => i.id === loan?.itemId ? { ...i, status: "利用可能" } : i);
-    await saveToFirebase(newItems, newLoans);
-    showToast("返却を確認しました。");
+    const newItems = items.map(i => i.id === loan.itemId ? { ...i, status: "利用可能" } : i);
+    try {
+      await setDoc(doc(db, "appData", "main"), { items: newItems, loans: newLoans });
+      showToast("返却を確認しました。");
+    } catch (e) {
+      console.error(e);
+      showToast("保存に失敗しました。もう一度お試しください。", "error");
+    }
   };
 
   const handleChangeStatus = async (itemId, newStatus) => {
