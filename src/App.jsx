@@ -167,9 +167,38 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
   const [newItem, setNewItem] = useState({ id: "", name: "", category: "" });
   const [editStatus, setEditStatus] = useState(null);
   const [addErr, setAddErr] = useState("");
+  const [sortKey, setSortKey] = useState("id");
+  const [sortDir, setSortDir] = useState("asc");
   const fileRef = useRef();
 
-  const filtered = items.filter(i => statusFilter === "すべて" || i.status === statusFilter);
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const STATUS_ORDER = { "利用可能": 0, "申請中": 1, "貸出中": 2, "故障": 3 };
+
+  const getDueDate = (itemId) => {
+    const loan = loans.find(l => l.itemId === itemId && l.status === "承認済" && !l.returned);
+    return loan?.dueDate || "";
+  };
+
+  const filtered = items
+    .filter(i => statusFilter === "すべて" || i.status === statusFilter)
+    .sort((a, b) => {
+      let valA, valB;
+      if (sortKey === "id") { valA = a.id; valB = b.id; }
+      else if (sortKey === "category") { valA = a.category; valB = b.category; }
+      else if (sortKey === "status") { valA = STATUS_ORDER[a.status] ?? 9; valB = STATUS_ORDER[b.status] ?? 9; return sortDir === "asc" ? valA - valB : valB - valA; }
+      else if (sortKey === "dueDate") { valA = getDueDate(a.id) || "9999"; valB = getDueDate(b.id) || "9999"; }
+      if (valA < valB) return sortDir === "asc" ? -1 : 1;
+      if (valA > valB) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
   const pendingLoan = (itemId) => loans.find(l => l.itemId === itemId && l.status === "審査中");
   const activeLoan = (itemId) => loans.find(l => l.itemId === itemId && l.status === "承認済" && !l.returned);
 
@@ -225,7 +254,28 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
         <div style={{ overflowX: "auto" }}>
           <table style={s.table}>
             <thead>
-              <tr>{["ID", "名称", "種別", "状態", "関連情報", "備考", "操作"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+              <tr>
+                {[
+                  { label: "ID", key: "id" },
+                  { label: "名称", key: null },
+                  { label: "種別", key: "category" },
+                  { label: "状態", key: "status" },
+                  { label: "関連情報（返却予定日）", key: "dueDate" },
+                  { label: "備考", key: null },
+                  { label: "操作", key: null },
+                ].map(h => (
+                  <th key={h.label} style={{ ...s.th, cursor: h.key ? "pointer" : "default", userSelect: "none" }}
+                    onClick={() => h.key && handleSort(h.key)}>
+                    {h.label}
+                    {h.key && sortKey === h.key && (
+                      <span style={{ marginLeft: 4 }}>{sortDir === "asc" ? "▲" : "▼"}</span>
+                    )}
+                    {h.key && sortKey !== h.key && (
+                      <span style={{ marginLeft: 4, color: C.gray300 }}>▲▼</span>
+                    )}
+                  </th>
+                ))}
+              </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
