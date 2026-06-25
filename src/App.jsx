@@ -571,19 +571,36 @@ export default function App() {
   const handleChangeStatus = async (itemId, newStatus) => {
     const prevItem = items.find(i => i.id === itemId);
     const newItems = items.map(i => i.id === itemId ? { ...i, status: newStatus } : i);
-    let newLoans = loans;
+    let newLoans = [...loans];
+
     if (newStatus === "利用可能" && (prevItem?.status === "貸出中" || prevItem?.status === "申請中")) {
       newLoans = loans.map(l => {
-        if (l.itemId === itemId && !l.returned && (l.status === "承認済" || l.status === "審査中")) {
-          return { ...l, returned: true, status: l.status === "審査中" ? "却下" : l.status, rejectedReason: l.status === "審査中" ? "管理者が状態を変更したため" : undefined };
+        if (l.itemId === itemId && !l.returned) {
+          if (l.status === "承認済") {
+            return { ...l, returned: true };
+          }
+          if (l.status === "審査中") {
+            return { ...l, returned: true, status: "却下", rejectedReason: "管理者が状態を変更したため" };
+          }
         }
         return l;
       });
-      showToast(`${itemId} の状態を「利用可能」に変更しました（返却完了）。`);
+      try {
+        await setDoc(doc(db, "appData", "main"), { items: newItems, loans: newLoans });
+        showToast(`${itemId} の状態を「利用可能」に変更しました（返却完了）。`);
+      } catch (e) {
+        console.error(e);
+        showToast("保存に失敗しました。", "error");
+      }
     } else {
-      showToast(`${itemId} の状態を「${newStatus}」に変更しました。`);
+      try {
+        await setDoc(doc(db, "appData", "main"), { items: newItems, loans: newLoans });
+        showToast(`${itemId} の状態を「${newStatus}」に変更しました。`);
+      } catch (e) {
+        console.error(e);
+        showToast("保存に失敗しました。", "error");
+      }
     }
-    await saveToFirebase(newItems, newLoans);
   };
 
   const handleAddItem = async (item) => {
