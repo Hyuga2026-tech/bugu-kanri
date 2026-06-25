@@ -1,6 +1,33 @@
 import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
+//メッセージ送信
+const DISCORD_WEBHOOK_URL = https://discordapp.com/api/webhooks/1519560284430274581/sP-JE_JuI_z0qhwSDmDxOd5e78wrue0djfxoc70aK-M5-FoT3O82lZobItAemXkt3q0X;
 
+const sendDiscordNotification = async (loan) => {
+  try {
+    await fetch(DISCORD_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        embeds: [{
+          title: "📋 新しい貸出申請が届きました",
+          color: 0x2c3f7a,
+          fields: [
+            { name: "申請者", value: loan.userName, inline: true },
+            { name: "借りるもの", value: loan.itemName, inline: true },
+            { name: "使用目的", value: loan.purpose, inline: false },
+            { name: "返却予定日", value: loan.dueDate, inline: true },
+            { name: "申請日", value: loan.requestedAt, inline: true },
+          ],
+          footer: { text: "武道具管理システム" },
+          timestamp: new Date().toISOString(),
+        }]
+      }),
+    });
+  } catch (e) {
+    console.error("Discord通知エラー:", e);
+  }
+};
 // ── 初期データ ──────────────────────────────────────────────
 const INITIAL_ITEMS = [
   { id: "K1", name: "小太刀 K1", category: "小太刀", status: "利用可能", note: "" },
@@ -540,6 +567,7 @@ export default function App() {
   const handleSubmitLoan = (loan) => {
     setLoans(prev => [loan, ...prev]);
     setItems(prev => prev.map(i => i.id === loan.itemId ? { ...i, status: "申請中" } : i));
+    sendDiscordNotification(loan);
     showToast("申請を送信しました。管理者の承認をお待ちください。");
     setTab("マイ申請");
   };
