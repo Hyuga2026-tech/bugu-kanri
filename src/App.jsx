@@ -1,6 +1,22 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
-//メッセージ送信
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
+
+// ── Firebase設定 ────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyDR_5nDCLZBQO7xJbcjHSLlqppthYiYpsg",
+  authDomain: "bugu-kanri.firebaseapp.com",
+  projectId: "bugu-kanri",
+  storageBucket: "bugu-kanri.firebasestorage.app",
+  messagingSenderId: "420973865056",
+  appId: "1:420973865056:web:302b12e5d9df985ba9fb05"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ── Discord通知 ──────────────────────────────────────────────
 const DISCORD_WEBHOOK_URL = "https://discordapp.com/api/webhooks/1519560284430274581/sP-JE_JuI_z0qhwSDmDxOd5e78wrue0djfxoc70aK-M5-FoT3O82lZobItAemXkt3q0X";
 
 const sendDiscordNotification = async (loan) => {
@@ -28,6 +44,7 @@ const sendDiscordNotification = async (loan) => {
     console.error("Discord通知エラー:", e);
   }
 };
+
 // ── 初期データ ──────────────────────────────────────────────
 const INITIAL_ITEMS = [
   { id: "K1", name: "小太刀 K1", category: "小太刀", status: "利用可能", note: "" },
@@ -35,11 +52,13 @@ const INITIAL_ITEMS = [
   { id: "K3", name: "小太刀 K3", category: "小太刀", status: "利用可能", note: "" },
   { id: "K4", name: "小太刀 K4", category: "小太刀", status: "利用可能", note: "" },
   { id: "K5", name: "小太刀 K5", category: "小太刀", status: "利用可能", note: "" },
-  { id: "C1", name: "長剣 C1",   category: "長剣",   status: "利用可能", note: "" },
-  { id: "C2", name: "長剣 C2",   category: "長剣",   status: "利用可能", note: "" },
+  { id: "C1", name: "長剣 C1", category: "長剣", status: "利用可能", note: "" },
+  { id: "C2", name: "長剣 C2", category: "長剣", status: "利用可能", note: "" },
 ];
 
-// 利用可能→申請中→貸出中→利用可能 のサイクル＋故障
+const ADMIN_PASSWORD = "Kumistral";
+const today = () => new Date().toISOString().slice(0, 10);
+
 const STATUS_COLORS = {
   "利用可能": { bg: "#e8f5e9", text: "#2e7d32", border: "#a5d6a7" },
   "申請中":   { bg: "#e8eaf6", text: "#283593", border: "#9fa8da" },
@@ -47,26 +66,10 @@ const STATUS_COLORS = {
   "故障":     { bg: "#fce4ec", text: "#b71c1c", border: "#ef9a9a" },
 };
 
-const ADMIN_PASSWORD = "Kumistral";
-
-const today = () => new Date().toISOString().slice(0, 10);
-
-// ── スタイル定数 ────────────────────────────────────────────
 const C = {
-  navy:   "#1a2744",
-  indigo: "#2c3f7a",
-  gold:   "#c9a84c",
-  cream:  "#f8f6f0",
-  white:  "#ffffff",
-  gray50: "#f9fafb",
-  gray100:"#f3f4f6",
-  gray300:"#d1d5db",
-  gray500:"#6b7280",
-  gray700:"#374151",
-  gray900:"#111827",
-  red:    "#dc2626",
-  green:  "#16a34a",
-  purple: "#4f46e5",
+  navy: "#1a2744", indigo: "#2c3f7a", gold: "#c9a84c", cream: "#f8f6f0",
+  white: "#ffffff", gray50: "#f9fafb", gray100: "#f3f4f6", gray300: "#d1d5db",
+  gray500: "#6b7280", gray700: "#374151", gray900: "#111827", red: "#dc2626", green: "#16a34a",
 };
 
 const s = {
@@ -76,7 +79,7 @@ const s = {
   headerSub: { color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 2 },
   badge: (role) => ({ background: role === "管理者" ? C.gold : "rgba(255,255,255,0.2)", color: role === "管理者" ? C.navy : "#fff", padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700 }),
   nav: { background: C.navy, display: "flex", gap: 0, padding: "0 16px" },
-  navBtn: (active) => ({ background: active ? C.gold : "transparent", color: active ? C.navy : "rgba(255,255,255,0.7)", border: "none", padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: active ? 700 : 400, transition: "all 0.2s", borderBottom: active ? "none" : "2px solid transparent" }),
+  navBtn: (active) => ({ background: active ? C.gold : "transparent", color: active ? C.navy : "rgba(255,255,255,0.7)", border: "none", padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: active ? 700 : 400, transition: "all 0.2s" }),
   main: { maxWidth: 1100, margin: "0 auto", padding: "24px 16px" },
   card: { background: C.white, borderRadius: 10, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", marginBottom: 16, overflow: "hidden" },
   cardHeader: { background: C.navy, color: C.gold, padding: "12px 20px", fontSize: 14, fontWeight: 700, letterSpacing: "0.06em", display: "flex", alignItems: "center", justifyContent: "space-between" },
@@ -103,6 +106,11 @@ const s = {
   modalBody: { padding: 24 },
   empty: { textAlign: "center", padding: "40px 20px", color: C.gray500, fontSize: 13 },
   alert: (type) => ({ background: type === "success" ? "#e8f5e9" : "#fce4ec", color: type === "success" ? "#2e7d32" : "#b71c1c", border: `1px solid ${type === "success" ? "#a5d6a7" : "#ef9a9a"}`, borderRadius: 6, padding: "10px 14px", marginBottom: 14, fontSize: 13 }),
+};
+
+// ── Firebase読み書き ─────────────────────────────────────────
+const saveToFirebase = async (items, loans) => {
+  await setDoc(doc(db, "appData", "main"), { items, loans });
 };
 
 // ── ログイン画面 ─────────────────────────────────────────────
@@ -162,10 +170,7 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
   const fileRef = useRef();
 
   const filtered = items.filter(i => statusFilter === "すべて" || i.status === statusFilter);
-
-  // 申請中の申請を取得（審査中ステータス）
   const pendingLoan = (itemId) => loans.find(l => l.itemId === itemId && l.status === "審査中");
-  // 承認済で未返却の貸出を取得
   const activeLoan = (itemId) => loans.find(l => l.itemId === itemId && l.status === "承認済" && !l.returned);
 
   const handleAdd = () => {
@@ -189,7 +194,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
     e.target.value = "";
   };
 
-  // 管理者が選べる状態の選択肢（申請中は手動選択不可）
   const adminStatusOptions = (currentStatus) => {
     if (currentStatus === "申請中") return ["申請中", "利用可能", "故障"];
     if (currentStatus === "貸出中") return ["貸出中", "利用可能", "故障"];
@@ -198,7 +202,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
 
   return (
     <div>
-      {/* フィルター & ツールバー */}
       <div style={{ ...s.row, justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div style={s.row}>
           {["すべて", "利用可能", "申請中", "貸出中", "故障"].map(f => (
@@ -214,7 +217,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
         )}
       </div>
 
-      {/* テーブル */}
       <div style={s.card}>
         <div style={s.cardHeader}>
           <span>物品一覧</span>
@@ -223,9 +225,7 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
         <div style={{ overflowX: "auto" }}>
           <table style={s.table}>
             <thead>
-              <tr>
-                {["ID", "名称", "種別", "状態", "関連情報", "備考", "操作"].map(h => <th key={h} style={s.th}>{h}</th>)}
-              </tr>
+              <tr>{["ID", "名称", "種別", "状態", "関連情報", "備考", "操作"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
@@ -251,9 +251,7 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
                       ) : (
                         <div style={s.row}>
                           <span style={s.statusBadge(item.status)}>{item.status}</span>
-                          {user.role === "管理者" && (
-                            <button style={{ ...s.btn("outline", "sm"), fontSize: 11 }} onClick={() => setEditStatus({ id: item.id, status: item.status })}>変更</button>
-                          )}
+                          {user.role === "管理者" && <button style={{ ...s.btn("outline", "sm"), fontSize: 11 }} onClick={() => setEditStatus({ id: item.id, status: item.status })}>変更</button>}
                         </div>
                       )}
                     </td>
@@ -263,8 +261,7 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
                           <div style={{ fontWeight: 600 }}>{relatedLoan.userName}</div>
                           {relatedLoan.status === "審査中"
                             ? <div style={{ color: "#283593" }}>申請中（{relatedLoan.requestedAt}）</div>
-                            : <div style={{ color: C.gray500 }}>返却予定: {relatedLoan.dueDate}</div>
-                          }
+                            : <div style={{ color: C.gray500 }}>返却予定: {relatedLoan.dueDate}</div>}
                         </div>
                       ) : <span style={{ color: C.gray300 }}>—</span>}
                     </td>
@@ -285,7 +282,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
         </div>
       </div>
 
-      {/* 物品追加モーダル */}
       {showAdd && (
         <div style={s.modal} onClick={e => e.target === e.currentTarget && setShowAdd(false)}>
           <div style={s.modalBox}>
@@ -293,22 +289,10 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onAddItem
             <div style={s.modalBody}>
               {addErr && <div style={s.alert("error")}>{addErr}</div>}
               <div style={{ ...s.grid3, marginBottom: 14 }}>
-                <div>
-                  <label style={s.label}>ID</label>
-                  <input style={s.input} placeholder="K6" value={newItem.id} onChange={e => setNewItem({ ...newItem, id: e.target.value })} />
-                </div>
-                <div>
-                  <label style={s.label}>名称</label>
-                  <input style={s.input} placeholder="小太刀 K6" value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} />
-                </div>
-                <div>
-                  <label style={s.label}>種別</label>
-                  <input style={s.input} placeholder="小太刀" value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} />
-                </div>
+                <div><label style={s.label}>ID</label><input style={s.input} placeholder="K6" value={newItem.id} onChange={e => setNewItem({ ...newItem, id: e.target.value })} /></div>
+                <div><label style={s.label}>名称</label><input style={s.input} placeholder="小太刀 K6" value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} /></div>
+                <div><label style={s.label}>種別</label><input style={s.input} placeholder="小太刀" value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} /></div>
               </div>
-              <p style={{ fontSize: 12, color: C.gray500, marginBottom: 16 }}>
-                💡 Excelファイルから一括読込も可能。列: ID / 名称 / 種別 / 備考
-              </p>
               <div style={s.row}>
                 <button style={s.btn("primary")} onClick={handleAdd}>追加</button>
                 <button style={s.btn("outline")} onClick={() => { setShowAdd(false); setAddErr(""); }}>キャンセル</button>
@@ -331,17 +315,7 @@ function LoanRequestModal({ item, user, onSubmit, onClose }) {
     if (!purpose.trim()) { setErr("使用目的を入力してください"); return; }
     if (!dueDate) { setErr("返却予定日を入力してください"); return; }
     if (dueDate <= today()) { setErr("返却予定日は明日以降を指定してください"); return; }
-    onSubmit({
-      itemId: item.id,
-      itemName: item.name,
-      userName: user.name,
-      purpose: purpose.trim(),
-      dueDate,
-      requestedAt: today(),
-      status: "審査中",
-      returned: false,
-      id: Date.now().toString(),
-    });
+    onSubmit({ itemId: item.id, itemName: item.name, userName: user.name, purpose: purpose.trim(), dueDate, requestedAt: today(), status: "審査中", returned: false, id: Date.now().toString() });
     onClose();
   };
 
@@ -377,10 +351,9 @@ function LoanRequestModal({ item, user, onSubmit, onClose }) {
   );
 }
 
-// ── 申請管理タブ（管理者用） ──────────────────────────────────
+// ── 申請管理タブ ──────────────────────────────────────────────
 function RequestsTab({ loans, onApprove, onReject, onReturn, user }) {
   const [filter, setFilter] = useState("審査中");
-
   const filtered = loans.filter(l => filter === "すべて" || l.status === filter);
   const statusColor = { "審査中": C.gold, "承認済": C.green, "却下": C.red };
 
@@ -389,15 +362,10 @@ function RequestsTab({ loans, onApprove, onReject, onReturn, user }) {
       <div style={{ ...s.row, marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         {["すべて", "審査中", "承認済", "却下"].map(f => (
           <button key={f} style={{ ...s.btn(filter === f ? "primary" : "outline", "sm") }} onClick={() => setFilter(f)}>
-            {f}{f !== "すべて" && (
-              <span style={{ marginLeft: 6, background: (statusColor[f] || C.gray500) + "33", color: statusColor[f] || C.gray500, padding: "1px 7px", borderRadius: 8, fontSize: 11, fontWeight: 700 }}>
-                {loans.filter(l => l.status === f).length}
-              </span>
-            )}
+            {f}{f !== "すべて" && <span style={{ marginLeft: 6, background: (statusColor[f] || C.gray500) + "33", color: statusColor[f] || C.gray500, padding: "1px 7px", borderRadius: 8, fontSize: 11, fontWeight: 700 }}>{loans.filter(l => l.status === f).length}</span>}
           </button>
         ))}
       </div>
-
       {filtered.length === 0 ? (
         <div style={s.card}><div style={s.empty}>該当する申請はありません</div></div>
       ) : filtered.map(loan => (
@@ -412,25 +380,14 @@ function RequestsTab({ loans, onApprove, onReject, onReturn, user }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "4px 16px", fontSize: 13, color: C.gray700 }}>
                 <div><span style={{ color: C.gray500 }}>申請者: </span>{loan.userName}</div>
                 <div><span style={{ color: C.gray500 }}>申請日: </span>{loan.requestedAt}</div>
-                <div>
-                  <span style={{ color: C.gray500 }}>返却予定: </span>
-                  <b style={{ color: loan.dueDate < today() && !loan.returned ? C.red : "inherit" }}>{loan.dueDate}</b>
-                  {loan.dueDate < today() && !loan.returned && loan.status === "承認済" && <span style={{ color: C.red }}> ⚠ 期限超過</span>}
-                </div>
+                <div><span style={{ color: C.gray500 }}>返却予定: </span><b style={{ color: loan.dueDate < today() && !loan.returned ? C.red : "inherit" }}>{loan.dueDate}</b>{loan.dueDate < today() && !loan.returned && loan.status === "承認済" && <span style={{ color: C.red }}> ⚠ 期限超過</span>}</div>
               </div>
-              <div style={{ marginTop: 6, fontSize: 13, color: C.gray700 }}>
-                <span style={{ color: C.gray500 }}>使用目的: </span>{loan.purpose}
-              </div>
-              {loan.rejectedReason && (
-                <div style={{ marginTop: 6, fontSize: 12, color: C.red }}>却下理由: {loan.rejectedReason}</div>
-              )}
+              <div style={{ marginTop: 6, fontSize: 13 }}><span style={{ color: C.gray500 }}>使用目的: </span>{loan.purpose}</div>
+              {loan.rejectedReason && <div style={{ marginTop: 6, fontSize: 12, color: C.red }}>却下理由: {loan.rejectedReason}</div>}
             </div>
             <div style={{ ...s.row, gap: 8, flexShrink: 0 }}>
               {user.role === "管理者" && loan.status === "審査中" && (
-                <>
-                  <button style={s.btn("success", "sm")} onClick={() => onApprove(loan.id)}>✓ 承認</button>
-                  <button style={s.btn("danger", "sm")} onClick={() => onReject(loan.id)}>✕ 却下</button>
-                </>
+                <><button style={s.btn("success", "sm")} onClick={() => onApprove(loan.id)}>✓ 承認</button><button style={s.btn("danger", "sm")} onClick={() => onReject(loan.id)}>✕ 却下</button></>
               )}
               {user.role === "管理者" && loan.status === "承認済" && !loan.returned && (
                 <button style={s.btn("gold", "sm")} onClick={() => onReturn(loan.id)}>返却確認</button>
@@ -463,11 +420,10 @@ function RejectModal({ onConfirm, onClose }) {
   );
 }
 
-// ── マイ申請タブ（一般ユーザー用） ────────────────────────────
+// ── マイ申請タブ ──────────────────────────────────────────────
 function MyRequestsTab({ loans, user }) {
   const myLoans = loans.filter(l => l.userName === user.name);
   const statusColor = { "審査中": C.gold, "承認済": C.green, "却下": C.red };
-
   return (
     <div>
       {myLoans.length === 0 ? (
@@ -482,16 +438,10 @@ function MyRequestsTab({ loans, user }) {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "4px 16px", fontSize: 13, color: C.gray700 }}>
               <div><span style={{ color: C.gray500 }}>申請日: </span>{loan.requestedAt}</div>
-              <div>
-                <span style={{ color: C.gray500 }}>返却予定: </span>
-                <b style={{ color: loan.dueDate < today() && !loan.returned && loan.status === "承認済" ? C.red : "inherit" }}>{loan.dueDate}</b>
-                {loan.dueDate < today() && !loan.returned && loan.status === "承認済" && <span style={{ color: C.red }}> ⚠ 期限超過</span>}
-              </div>
+              <div><span style={{ color: C.gray500 }}>返却予定: </span><b style={{ color: loan.dueDate < today() && !loan.returned && loan.status === "承認済" ? C.red : "inherit" }}>{loan.dueDate}</b></div>
               <div><span style={{ color: C.gray500 }}>使用目的: </span>{loan.purpose}</div>
             </div>
-            {loan.rejectedReason && (
-              <div style={{ marginTop: 8, fontSize: 12, color: C.red, background: "#fce4ec", padding: "6px 10px", borderRadius: 4 }}>却下理由: {loan.rejectedReason}</div>
-            )}
+            {loan.rejectedReason && <div style={{ marginTop: 8, fontSize: 12, color: C.red, background: "#fce4ec", padding: "6px 10px", borderRadius: 4 }}>却下理由: {loan.rejectedReason}</div>}
           </div>
         </div>
       ))}
@@ -507,37 +457,27 @@ function Dashboard({ items, loans }) {
     applying: items.filter(i => i.status === "申請中").length,
     lent: items.filter(i => i.status === "貸出中").length,
     broken: items.filter(i => i.status === "故障").length,
-    pending: loans.filter(l => l.status === "審査中").length,
     overdue: loans.filter(l => l.status === "承認済" && !l.returned && l.dueDate < today()).length,
   };
-
   const stats = [
-    { label: "総物品数",   value: counts.total,     color: C.navy,    icon: "⚔️" },
-    { label: "利用可能",   value: counts.available,  color: C.green,   icon: "✅" },
-    { label: "申請中",     value: counts.applying,   color: "#283593", icon: "📝" },
-    { label: "貸出中",     value: counts.lent,       color: "#e65100", icon: "📤" },
-    { label: "故障",       value: counts.broken,     color: C.red,     icon: "⚠️" },
-    { label: "期限超過",   value: counts.overdue,    color: C.red,     icon: "🔴" },
+    { label: "総物品数", value: counts.total, color: C.navy, icon: "⚔️" },
+    { label: "利用可能", value: counts.available, color: C.green, icon: "✅" },
+    { label: "申請中", value: counts.applying, color: "#283593", icon: "📝" },
+    { label: "貸出中", value: counts.lent, color: "#e65100", icon: "📤" },
+    { label: "故障", value: counts.broken, color: C.red, icon: "⚠️" },
+    { label: "期限超過", value: counts.overdue, color: C.red, icon: "🔴" },
   ];
-
   return (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
-        {stats.map(st => (
-          <div key={st.label} style={{ ...s.card, marginBottom: 0 }}>
-            <div style={{ padding: "16px", textAlign: "center" }}>
-              <div style={{ fontSize: 28, marginBottom: 4 }}>{st.icon}</div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: st.color }}>{st.value}</div>
-              <div style={{ fontSize: 12, color: C.gray500, marginTop: 2 }}>{st.label}</div>
-            </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+      {stats.map(st => (
+        <div key={st.label} style={{ ...s.card, marginBottom: 0 }}>
+          <div style={{ padding: "16px", textAlign: "center" }}>
+            <div style={{ fontSize: 28, marginBottom: 4 }}>{st.icon}</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: st.color }}>{st.value}</div>
+            <div style={{ fontSize: 12, color: C.gray500, marginTop: 2 }}>{st.label}</div>
           </div>
-        ))}
-      </div>
-      {counts.pending > 0 && (
-        <div style={{ background: "#fff8e1", border: "1px solid #ffe082", borderRadius: 8, padding: "12px 16px", fontSize: 13, color: "#f57f17" }}>
-          ⚠️ 審査待ちの申請が <b>{counts.pending}</b> 件あります。「申請管理」タブから確認してください。
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -545,17 +485,42 @@ function Dashboard({ items, loans }) {
 // ── メインアプリ ─────────────────────────────────────────────
 export default function App() {
   const [user, setUser] = useState(null);
-  const [items, setItems] = useState(INITIAL_ITEMS);
+  const [items, setItems] = useState([]);
   const [loans, setLoans] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("物品一覧");
   const [loanTarget, setLoanTarget] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [toast, setToast] = useState(null);
 
+  // Firebaseからリアルタイムでデータ取得
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "appData", "main"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setItems(data.items || []);
+        setLoans(data.loans || []);
+      } else {
+        // 初回のみ初期データを書き込む
+        saveToFirebase(INITIAL_ITEMS, []);
+        setItems(INITIAL_ITEMS);
+        setLoans([]);
+      }
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
+
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: C.navy, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ color: C.gold, fontSize: 18, fontWeight: 700 }}>⚔️ 読み込み中...</div>
+    </div>
+  );
 
   if (!user) return <LoginScreen onLogin={setUser} />;
 
@@ -563,66 +528,65 @@ export default function App() {
     ? ["物品一覧", "申請管理", "ダッシュボード"]
     : ["物品一覧", "マイ申請"];
 
-  // 申請送信 → 物品を「申請中」に変更
-  const handleSubmitLoan = (loan) => {
-    setLoans(prev => [loan, ...prev]);
-    setItems(prev => prev.map(i => i.id === loan.itemId ? { ...i, status: "申請中" } : i));
+  const handleSubmitLoan = async (loan) => {
+    const newLoans = [loan, ...loans];
+    const newItems = items.map(i => i.id === loan.itemId ? { ...i, status: "申請中" } : i);
+    await saveToFirebase(newItems, newLoans);
     sendDiscordNotification(loan);
     showToast("申請を送信しました。管理者の承認をお待ちください。");
     setTab("マイ申請");
   };
 
-  // 承認 → 物品を「貸出中」に
-  const handleApprove = (loanId) => {
+  const handleApprove = async (loanId) => {
     const loan = loans.find(l => l.id === loanId);
-    setLoans(prev => prev.map(l => l.id === loanId ? { ...l, status: "承認済" } : l));
-    if (loan) setItems(prev => prev.map(i => i.id === loan.itemId ? { ...i, status: "貸出中" } : i));
+    const newLoans = loans.map(l => l.id === loanId ? { ...l, status: "承認済" } : l);
+    const newItems = items.map(i => i.id === loan?.itemId ? { ...i, status: "貸出中" } : i);
+    await saveToFirebase(newItems, newLoans);
     showToast("申請を承認しました。");
   };
 
-  // 却下 → 物品を「利用可能」に戻す
-  const handleRejectConfirm = (reason) => {
+  const handleRejectConfirm = async (reason) => {
     const loan = loans.find(l => l.id === rejectTarget);
-    setLoans(prev => prev.map(l => l.id === rejectTarget ? { ...l, status: "却下", rejectedReason: reason } : l));
-    if (loan) setItems(prev => prev.map(i => i.id === loan.itemId ? { ...i, status: "利用可能" } : i));
+    const newLoans = loans.map(l => l.id === rejectTarget ? { ...l, status: "却下", rejectedReason: reason } : l);
+    const newItems = items.map(i => i.id === loan?.itemId ? { ...i, status: "利用可能" } : i);
+    await saveToFirebase(newItems, newLoans);
     setRejectTarget(null);
     showToast("申請を却下しました。", "error");
   };
 
-  // 返却確認ボタン → 物品を「利用可能」に
-  const handleReturn = (loanId) => {
+  const handleReturn = async (loanId) => {
     const loan = loans.find(l => l.id === loanId);
-    setLoans(prev => prev.map(l => l.id === loanId ? { ...l, returned: true } : l));
-    if (loan) setItems(prev => prev.map(i => i.id === loan.itemId ? { ...i, status: "利用可能" } : i));
+    const newLoans = loans.map(l => l.id === loanId ? { ...l, returned: true } : l);
+    const newItems = items.map(i => i.id === loan?.itemId ? { ...i, status: "利用可能" } : i);
+    await saveToFirebase(newItems, newLoans);
     showToast("返却を確認しました。");
   };
 
-  // 管理者による状態手動変更
-  // 「貸出中」→「利用可能」 または 「申請中」→「利用可能」 に変えた場合は返却完了扱い
-  const handleChangeStatus = (itemId, newStatus) => {
+  const handleChangeStatus = async (itemId, newStatus) => {
     const prevItem = items.find(i => i.id === itemId);
-    setItems(prev => prev.map(i => i.id === itemId ? { ...i, status: newStatus } : i));
-
+    const newItems = items.map(i => i.id === itemId ? { ...i, status: newStatus } : i);
+    let newLoans = loans;
     if (newStatus === "利用可能" && (prevItem?.status === "貸出中" || prevItem?.status === "申請中")) {
-      // 対応する未返却の承認済 or 審査中の貸出を返却済にする
-      setLoans(prev => prev.map(l => {
+      newLoans = loans.map(l => {
         if (l.itemId === itemId && !l.returned && (l.status === "承認済" || l.status === "審査中")) {
           return { ...l, returned: true, status: l.status === "審査中" ? "却下" : l.status, rejectedReason: l.status === "審査中" ? "管理者が状態を変更したため" : undefined };
         }
         return l;
-      }));
+      });
       showToast(`${itemId} の状態を「利用可能」に変更しました（返却完了）。`);
     } else {
       showToast(`${itemId} の状態を「${newStatus}」に変更しました。`);
     }
+    await saveToFirebase(newItems, newLoans);
   };
 
-  const handleAddItem = (item) => {
-    setItems(prev => [...prev, item]);
+  const handleAddItem = async (item) => {
+    const newItems = [...items, item];
+    await saveToFirebase(newItems, loans);
     showToast(`${item.name} を追加しました。`);
   };
 
-  const handleImportXlsx = (rows) => {
+  const handleImportXlsx = async (rows) => {
     const newItems = rows.map(r => ({
       id: String(r["ID"] || r["id"] || "").trim(),
       name: String(r["名称"] || r["name"] || "").trim(),
@@ -630,17 +594,15 @@ export default function App() {
       note: String(r["備考"] || r["note"] || "").trim(),
       status: "利用可能",
     })).filter(i => i.id && i.name);
-    const deduped = newItems.filter(n => !items.find(ex => ex.id === n.id));
-    setItems(prev => [...prev, ...deduped]);
-    showToast(`${deduped.length} 件の物品をインポートしました。`);
+    const deduped = [...items, ...newItems.filter(n => !items.find(ex => ex.id === n.id))];
+    await saveToFirebase(deduped, loans);
+    showToast(`${newItems.length} 件の物品をインポートしました。`);
   };
 
-  // 審査中申請数（バッジ表示用）
   const pendingCount = loans.filter(l => l.status === "審査中").length;
 
   return (
     <div style={s.app}>
-      {/* ヘッダー */}
       <header style={s.header}>
         <div>
           <h1 style={s.headerTitle}>⚔️ 武道具管理システム</h1>
@@ -653,7 +615,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* ナビ */}
       <nav style={s.nav}>
         {tabs.map(t => (
           <button key={t} style={{ ...s.navBtn(tab === t), position: "relative" }} onClick={() => setTab(t)}>
@@ -665,43 +626,20 @@ export default function App() {
         ))}
       </nav>
 
-      {/* メイン */}
       <main style={s.main}>
         {toast && (
           <div style={{ ...s.alert(toast.type), position: "fixed", top: 80, right: 20, zIndex: 2000, minWidth: 280, boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>
             {toast.msg}
           </div>
         )}
-
         {tab === "ダッシュボード" && <Dashboard items={items} loans={loans} />}
-
-        {tab === "物品一覧" && (
-          <ItemsTab
-            items={items}
-            loans={loans}
-            user={user}
-            onRequestLoan={setLoanTarget}
-            onChangeStatus={handleChangeStatus}
-            onAddItem={handleAddItem}
-            onImportXlsx={handleImportXlsx}
-          />
-        )}
-
-        {tab === "申請管理" && user.role === "管理者" && (
-          <RequestsTab loans={loans} onApprove={handleApprove} onReject={setRejectTarget} onReturn={handleReturn} user={user} />
-        )}
-
-        {tab === "マイ申請" && user.role !== "管理者" && (
-          <MyRequestsTab loans={loans} user={user} />
-        )}
+        {tab === "物品一覧" && <ItemsTab items={items} loans={loans} user={user} onRequestLoan={setLoanTarget} onChangeStatus={handleChangeStatus} onAddItem={handleAddItem} onImportXlsx={handleImportXlsx} />}
+        {tab === "申請管理" && user.role === "管理者" && <RequestsTab loans={loans} onApprove={handleApprove} onReject={setRejectTarget} onReturn={handleReturn} user={user} />}
+        {tab === "マイ申請" && user.role !== "管理者" && <MyRequestsTab loans={loans} user={user} />}
       </main>
 
-      {loanTarget && (
-        <LoanRequestModal item={loanTarget} user={user} onSubmit={handleSubmitLoan} onClose={() => setLoanTarget(null)} />
-      )}
-      {rejectTarget && (
-        <RejectModal onConfirm={handleRejectConfirm} onClose={() => setRejectTarget(null)} />
-      )}
+      {loanTarget && <LoanRequestModal item={loanTarget} user={user} onSubmit={handleSubmitLoan} onClose={() => setLoanTarget(null)} />}
+      {rejectTarget && <RejectModal onConfirm={handleRejectConfirm} onClose={() => setRejectTarget(null)} />}
     </div>
   );
 }
