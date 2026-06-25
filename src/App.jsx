@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 //メッセージ送信
-const DISCORD_WEBHOOK_URL = https://discordapp.com/api/webhooks/1519560284430274581/sP-JE_JuI_z0qhwSDmDxOd5e78wrue0djfxoc70aK-M5-FoT3O82lZobItAemXkt3q0X;
+const DISCORD_WEBHOOK_URL = "https://discordapp.com/api/webhooks/1519560284430274581/sP-JE_JuI_z0qhwSDmDxOd5e78wrue0djfxoc70aK-M5-FoT3O82lZobItAemXkt3q0X";
 
 const sendDiscordNotification = async (loan) => {
   try {
