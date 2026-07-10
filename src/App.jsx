@@ -14,7 +14,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const DISCORD_WEBHOOK_URL = "https://discordapp.com/api/webhooks/1519560284430274581/sP-JE_JuI_z0qhwSDmDx0d5e78wrue0djfxoc70aK-M5-FoT30821ZobItAemXkt3q0X";
+const DISCORD_WEBHOOK_URL = "https://discordapp.com/api/webhooks/1519560284430274581/sP-JE_JuI_z0qhwSDmDxOd5e78wrue0djfxoc70aK-M5-FoT3O82lZobItAemXkt3q0X";
 const sendDiscordNotification = async (type, data) => {
   try {
     let title, fields;
