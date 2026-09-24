@@ -44,25 +44,18 @@ const sendDiscordNotification = async (type, data) => {
   } catch (e) { console.error("Discord通知エラー:", e); }
 };
 
-const INITIAL_ITEMS = [
-  { id: "K1", name: "小太刀 K1", category: "小太刀", status: "利用可能", note: "", hidden: false },
-  { id: "K2", name: "小太刀 K2", category: "小太刀", status: "利用可能", note: "", hidden: false },
-  { id: "K3", name: "小太刀 K3", category: "小太刀", status: "利用可能", note: "", hidden: false },
-  { id: "K4", name: "小太刀 K4", category: "小太刀", status: "利用可能", note: "", hidden: false },
-  { id: "K5", name: "小太刀 K5", category: "小太刀", status: "利用可能", note: "", hidden: false },
-  { id: "C1", name: "長剣 C1", category: "長剣", status: "利用可能", note: "", hidden: false },
-  { id: "C2", name: "長剣 C2", category: "長剣", status: "利用可能", note: "", hidden: false },
-];
+// 初期物品は空（Excelから登録する運用）
+const INITIAL_ITEMS = [];
 
 const ADMIN_PASSWORD = "Kumistral";
 const today = () => new Date().toISOString().slice(0, 10);
 
 const STATUS_COLORS = {
-  "利用可能": { bg: "#e8f5e9", text: "#2e7d32", border: "#a5d6a7" },
-  "申請中":   { bg: "#e8eaf6", text: "#283593", border: "#9fa8da" },
+  "利用可能":   { bg: "#e8f5e9", text: "#2e7d32", border: "#a5d6a7" },
+  "申請中":     { bg: "#e8eaf6", text: "#283593", border: "#9fa8da" },
   "返却申請中": { bg: "#f3e5f5", text: "#6a1b9a", border: "#ce93d8" },
-  "貸出中":   { bg: "#fff3e0", text: "#e65100", border: "#ffb74d" },
-  "故障":     { bg: "#fce4ec", text: "#b71c1c", border: "#ef9a9a" },
+  "貸出中":     { bg: "#fff3e0", text: "#e65100", border: "#ffb74d" },
+  "故障":       { bg: "#fce4ec", text: "#b71c1c", border: "#ef9a9a" },
 };
 
 const C = {
@@ -73,7 +66,7 @@ const C = {
 
 const s = {
   app: { minHeight: "100vh", background: C.cream, fontFamily: "'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif" },
-  header: { background: `linear-gradient(135deg, ${C.navy} 0%, ${C.indigo} 100%)`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, boxShadow: "0 2px 12px rgba(0,0,0,0.3)" },
+  header: { background: `linear-gradient(135deg, ${C.navy} 0%, ${C.indigo} 100%)`, padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64, boxShadow: "0 2px 12px rgba(0,0,0,0.3)", flexWrap: "wrap", gap: 8 },
   headerTitle: { color: C.gold, fontSize: 20, fontWeight: 700, letterSpacing: "0.08em", margin: 0 },
   headerSub: { color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 2 },
   badge: (role) => ({ background: role === "管理者" ? C.gold : "rgba(255,255,255,0.2)", color: role === "管理者" ? C.navy : "#fff", padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700 }),
@@ -104,14 +97,26 @@ const s = {
   modalHeader: { background: C.navy, color: C.gold, padding: "16px 20px", fontSize: 15, fontWeight: 700, borderRadius: "12px 12px 0 0" },
   modalBody: { padding: 24 },
   empty: { textAlign: "center", padding: "40px 20px", color: C.gray500, fontSize: 13 },
-  alert: (type) => ({ background: type === "success" ? "#e8f5e9" : "#fce4ec", color: type === "success" ? "#2e7d32" : "#b71c1c", border: `1px solid ${type === "success" ? "#a5d6a7" : "#ef9a9a"}`, borderRadius: 6, padding: "10px 14px", marginBottom: 14, fontSize: 13 }),
+  alert: (type) => ({ background: type === "success" ? "#e8f5e9" : type === "warn" ? "#fff8e1" : "#fce4ec", color: type === "success" ? "#2e7d32" : type === "warn" ? "#f57f17" : "#b71c1c", border: `1px solid ${type === "success" ? "#a5d6a7" : type === "warn" ? "#ffe082" : "#ef9a9a"}`, borderRadius: 6, padding: "10px 14px", marginBottom: 14, fontSize: 13 }),
 };
 
-const saveToFirebase = async (items, loans, notice) => {
+const saveDB = async (items, loans, notice) => {
   await setDoc(doc(db, "appData", "main"), { items, loans, notice: notice ?? "" });
 };
 
-// ── マーキー（自動スクロールテキスト）──────────────────────
+// ── バックアップ＆リストア ───────────────────────────────────
+const downloadBackup = (items, loans, notice) => {
+  const data = { backupDate: new Date().toISOString(), items, loans, notice };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `bugu-kanri-backup-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ── マーキー ─────────────────────────────────────────────────
 function Marquee({ text }) {
   const ref = useRef();
   const [overflow, setOverflow] = useState(false);
@@ -123,7 +128,7 @@ function Marquee({ text }) {
       {overflow ? (
         <span style={{ display: "inline-block", animation: "marquee 12s linear infinite", paddingLeft: "100%" }}>
           {text}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{text}
-          <style>{`@keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }`}</style>
+          <style>{`@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}`}</style>
         </span>
       ) : <span>{text}</span>}
     </div>
@@ -144,13 +149,13 @@ function LoginScreen({ onLogin, notice }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: `linear-gradient(160deg, ${C.navy} 0%, ${C.indigo} 60%, #3d5296 100%)`, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+    <div style={{ minHeight: "100vh", background: `linear-gradient(160deg,${C.navy} 0%,${C.indigo} 60%,#3d5296 100%)`, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       {notice && (
-        <div style={{ width: "min(400px, 90%)", background: "rgba(201,168,76,0.15)", border: `1px solid ${C.gold}`, borderRadius: 8, padding: "10px 16px", color: C.gold, fontSize: 13, fontWeight: 600, overflow: "hidden" }}>
+        <div style={{ width: "min(400px,90%)", background: "rgba(201,168,76,0.15)", border: `1px solid ${C.gold}`, borderRadius: 8, padding: "10px 16px", color: C.gold, fontSize: 13, fontWeight: 600, overflow: "hidden" }}>
           <Marquee text={`📢 ${notice}`} />
         </div>
       )}
-      <div style={{ background: C.white, borderRadius: 16, padding: "40px 36px", width: "min(360px, 90%)", boxShadow: "0 12px 48px rgba(0,0,0,0.4)" }}>
+      <div style={{ background: C.white, borderRadius: 16, padding: "40px 36px", width: "min(360px,90%)", boxShadow: "0 12px 48px rgba(0,0,0,0.4)" }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>⚔️</div>
           <h1 style={{ color: C.navy, fontSize: 20, fontWeight: 800, margin: 0, letterSpacing: "0.06em" }}>武道具管理システム</h1>
@@ -175,6 +180,44 @@ function LoginScreen({ onLogin, notice }) {
           </div>
         )}
         <button style={{ ...s.btn("primary"), width: "100%", padding: "11px", fontSize: 14, marginTop: 8, background: C.navy }} onClick={handle}>ログイン →</button>
+      </div>
+    </div>
+  );
+}
+
+// ── データなし警告画面 ────────────────────────────────────────
+function EmptyDataScreen({ onInit, onRestore }) {
+  const fileRef = useRef();
+  const handleFile = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (data.items && data.loans !== undefined) onRestore(data);
+        else alert("バックアップファイルの形式が正しくありません");
+      } catch { alert("JSONファイルの読み込みに失敗しました"); }
+    };
+    reader.readAsText(file);
+  };
+  return (
+    <div style={{ minHeight: "100vh", background: C.cream, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: C.white, borderRadius: 16, padding: "40px 36px", maxWidth: 460, width: "90%", boxShadow: "0 4px 24px rgba(0,0,0,0.12)", textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <h2 style={{ color: C.navy, marginBottom: 12 }}>データが見つかりません</h2>
+        <p style={{ color: C.gray500, fontSize: 13, marginBottom: 24, lineHeight: 1.7 }}>
+          Firestoreにデータが存在しません。<br />
+          バックアップから復元するか、新規で初期化してください。
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <button style={{ ...s.btn("primary"), padding: "12px" }} onClick={() => fileRef.current.click()}>
+            📂 バックアップから復元
+          </button>
+          <button style={{ ...s.btn("outline"), padding: "12px" }} onClick={onInit}>
+            ✨ 新規で初期化する（物品ゼロからスタート）
+          </button>
+        </div>
+        <input ref={fileRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleFile} />
       </div>
     </div>
   );
@@ -287,7 +330,7 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeN
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} style={s.empty}>物品がありません</td></tr>
+                <tr><td colSpan={7} style={s.empty}>物品がありません{user.role === "管理者" && "。「＋ 物品追加」またはExcel読込で登録してください"}</td></tr>
               ) : filtered.map(item => {
                 const pending = pendingLoan(item.id);
                 const active = activeLoan(item.id);
@@ -297,8 +340,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeN
                 return (
                   <tr key={item.id} style={{ background: isHidden ? "#f0f0f0" : item.status === "故障" ? "#fff5f5" : item.status === "申請中" ? "#f5f6ff" : item.status === "返却申請中" ? "#fdf4ff" : "white", opacity: isHidden ? 0.6 : 1 }}>
                     <td style={s.td}><span style={{ fontFamily: "monospace", fontWeight: 700, color: C.indigo }}>{item.id}</span>{isHidden && <span style={{ ...s.tag("#888"), marginLeft: 6 }}>非表示</span>}</td>
-
-                    {/* 名称（管理者は編集可） */}
                     <td style={s.td}>
                       {user.role === "管理者" && editStatus?.id === item.id + "_name" ? (
                         <div style={s.row}>
@@ -314,10 +355,7 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeN
                         </div>
                       )}
                     </td>
-
                     <td style={s.td}><span style={s.tag(C.indigo)}>{item.category}</span></td>
-
-                    {/* 状態 */}
                     <td style={s.td}>
                       {user.role === "管理者" && editStatus?.id === item.id + "_status" ? (
                         <div style={s.row}>
@@ -334,8 +372,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeN
                         </div>
                       )}
                     </td>
-
-                    {/* 関連情報 */}
                     <td style={s.td}>
                       {retPending ? (
                         <div style={{ fontSize: 12 }}>
@@ -352,8 +388,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeN
                         </div>
                       ) : <span style={{ color: C.gray300 }}>—</span>}
                     </td>
-
-                    {/* 備考 */}
                     <td style={{ ...s.td, fontSize: 12 }}>
                       {user.role === "管理者" && editStatus?.id === item.id + "_note" ? (
                         <div style={s.row}>
@@ -369,27 +403,15 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeN
                         </div>
                       )}
                     </td>
-
-                    {/* 操作 */}
                     <td style={s.td}>
                       <div style={{ ...s.row, flexWrap: "wrap", gap: 4 }}>
-                        {user.role !== "管理者" && item.status === "利用可能" && !isHidden && (
-                          <button style={s.btn("primary", "sm")} onClick={() => onRequestLoan(item)}>申請</button>
-                        )}
-                        {user.role !== "管理者" && item.status === "申請中" && pending?.userName === user.name && (
-                          <span style={{ fontSize: 12, color: "#283593", fontWeight: 600 }}>審査待ち</span>
-                        )}
-                        {user.role !== "管理者" && item.status === "貸出中" && active?.userName === user.name && (
-                          <button style={s.btn("purple", "sm")} onClick={() => onRequestReturn(item, active)}>返却申請</button>
-                        )}
-                        {user.role !== "管理者" && item.status === "返却申請中" && retPending?.userName === user.name && (
-                          <span style={{ fontSize: 12, color: C.purple, fontWeight: 600 }}>返却審査待ち</span>
-                        )}
+                        {user.role !== "管理者" && item.status === "利用可能" && !isHidden && <button style={s.btn("primary", "sm")} onClick={() => onRequestLoan(item)}>申請</button>}
+                        {user.role !== "管理者" && item.status === "申請中" && pending?.userName === user.name && <span style={{ fontSize: 12, color: "#283593", fontWeight: 600 }}>審査待ち</span>}
+                        {user.role !== "管理者" && item.status === "貸出中" && active?.userName === user.name && <button style={s.btn("purple", "sm")} onClick={() => onRequestReturn(item, active)}>返却申請</button>}
+                        {user.role !== "管理者" && item.status === "返却申請中" && retPending?.userName === user.name && <span style={{ fontSize: 12, color: C.purple, fontWeight: 600 }}>返却審査待ち</span>}
                         {user.role === "管理者" && (
                           <>
-                            <button style={{ ...s.btn("outline", "sm"), fontSize: 11, color: isHidden ? C.green : C.gray500, borderColor: isHidden ? C.green : C.gray300 }} onClick={() => onToggleHidden(item.id)}>
-                              {isHidden ? "表示" : "非表示"}
-                            </button>
+                            <button style={{ ...s.btn("outline", "sm"), fontSize: 11, color: isHidden ? C.green : C.gray500, borderColor: isHidden ? C.green : C.gray300 }} onClick={() => onToggleHidden(item.id)}>{isHidden ? "表示" : "非表示"}</button>
                             <button style={{ ...s.btn("danger", "sm"), fontSize: 11 }} onClick={() => setConfirmDelete(item)}>削除</button>
                           </>
                         )}
@@ -403,7 +425,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeN
         </div>
       </div>
 
-      {/* 削除確認モーダル */}
       {confirmDelete && (
         <div style={s.modal}>
           <div style={s.modalBox}>
@@ -419,7 +440,6 @@ function ItemsTab({ items, loans, user, onRequestLoan, onChangeStatus, onChangeN
         </div>
       )}
 
-      {/* 物品追加モーダル */}
       {showAdd && (
         <div style={s.modal} onClick={e => e.target === e.currentTarget && setShowAdd(false)}>
           <div style={s.modalBox}>
@@ -503,7 +523,7 @@ function ReturnRequestModal({ item, loan, user, onSubmit, onClose }) {
 }
 
 // ── 申請管理タブ ──────────────────────────────────────────────
-function RequestsTab({ loans, onApprove, onReject, onApproveReturn, onRejectReturn, user }) {
+function RequestsTab({ loans, onApprove, onReject, onApproveReturn, onRejectReturn }) {
   const [filter, setFilter] = useState("審査中");
   const allRequests = loans.flatMap(l => {
     const result = [{ ...l, _type: "loan" }];
@@ -529,59 +549,52 @@ function RequestsTab({ loans, onApprove, onReject, onApproveReturn, onRejectRetu
           </button>
         ))}
       </div>
-      {filtered.length === 0 ? (
-        <div style={s.card}><div style={s.empty}>該当する申請はありません</div></div>
-      ) : filtered.map(loan => {
-        const isReturn = loan._type === "return";
-        return (
-          <div key={loan._id || loan.id} style={{ ...s.card, borderLeft: `4px solid ${isReturn ? C.purple : (statusColor[loan.status] || C.gray300)}` }}>
-            <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ ...s.row, gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{loan.itemName}</span>
-                  {isReturn
-                    ? <span style={{ background: C.purple + "22", color: C.purple, padding: "2px 10px", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>返却申請</span>
-                    : <span style={{ background: (statusColor[loan.status] || C.gray500) + "22", color: statusColor[loan.status] || C.gray500, padding: "2px 10px", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>{loan.status}</span>
-                  }
-                  {!isReturn && loan.returned && <span style={s.tag(C.green)}>返却済</span>}
+      {filtered.length === 0 ? <div style={s.card}><div style={s.empty}>該当する申請はありません</div></div>
+        : filtered.map(loan => {
+          const isReturn = loan._type === "return";
+          return (
+            <div key={loan._id || loan.id} style={{ ...s.card, borderLeft: `4px solid ${isReturn ? C.purple : (statusColor[loan.status] || C.gray300)}` }}>
+              <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ ...s.row, gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{loan.itemName}</span>
+                    {isReturn
+                      ? <span style={{ background: C.purple + "22", color: C.purple, padding: "2px 10px", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>返却申請</span>
+                      : <span style={{ background: (statusColor[loan.status] || C.gray500) + "22", color: statusColor[loan.status] || C.gray500, padding: "2px 10px", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>{loan.status}</span>
+                    }
+                    {!isReturn && loan.returned && <span style={s.tag(C.green)}>返却済</span>}
+                  </div>
+                  {isReturn ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "4px 16px", fontSize: 13, color: C.gray700 }}>
+                      <div><span style={{ color: C.gray500 }}>申請者: </span>{loan.userName}</div>
+                      <div><span style={{ color: C.gray500 }}>返却申請日: </span>{loan.returnRequestedAt}</div>
+                      {loan.returnMessage && <div><span style={{ color: C.gray500 }}>メッセージ: </span>{loan.returnMessage}</div>}
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "4px 16px", fontSize: 13, color: C.gray700 }}>
+                      <div><span style={{ color: C.gray500 }}>申請者: </span>{loan.userName}</div>
+                      <div><span style={{ color: C.gray500 }}>申請日: </span>{loan.requestedAt}</div>
+                      <div><span style={{ color: C.gray500 }}>返却予定: </span><b style={{ color: loan.dueDate < today() && !loan.returned ? C.red : "inherit" }}>{loan.dueDate}</b>{loan.dueDate < today() && !loan.returned && loan.status === "承認済" && <span style={{ color: C.red }}> ⚠ 期限超過</span>}</div>
+                      <div><span style={{ color: C.gray500 }}>使用目的: </span>{loan.purpose}</div>
+                    </div>
+                  )}
+                  {loan.rejectedReason && <div style={{ marginTop: 6, fontSize: 12, color: C.red }}>却下理由: {loan.rejectedReason}</div>}
                 </div>
-                {isReturn ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "4px 16px", fontSize: 13, color: C.gray700 }}>
-                    <div><span style={{ color: C.gray500 }}>申請者: </span>{loan.userName}</div>
-                    <div><span style={{ color: C.gray500 }}>返却申請日: </span>{loan.returnRequestedAt}</div>
-                    {loan.returnMessage && <div><span style={{ color: C.gray500 }}>メッセージ: </span>{loan.returnMessage}</div>}
-                  </div>
-                ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "4px 16px", fontSize: 13, color: C.gray700 }}>
-                    <div><span style={{ color: C.gray500 }}>申請者: </span>{loan.userName}</div>
-                    <div><span style={{ color: C.gray500 }}>申請日: </span>{loan.requestedAt}</div>
-                    <div><span style={{ color: C.gray500 }}>返却予定: </span><b style={{ color: loan.dueDate < today() && !loan.returned ? C.red : "inherit" }}>{loan.dueDate}</b>{loan.dueDate < today() && !loan.returned && loan.status === "承認済" && <span style={{ color: C.red }}> ⚠ 期限超過</span>}</div>
-                    <div><span style={{ color: C.gray500 }}>使用目的: </span>{loan.purpose}</div>
-                  </div>
-                )}
-                {loan.rejectedReason && <div style={{ marginTop: 6, fontSize: 12, color: C.red }}>却下理由: {loan.rejectedReason}</div>}
-              </div>
-              <div style={{ ...s.row, gap: 8, flexShrink: 0 }}>
-                {isReturn ? (
-                  <>
-                    <button style={s.btn("success", "sm")} onClick={() => onApproveReturn(loan.id)}>✓ 返却承認</button>
-                    <button style={s.btn("danger", "sm")} onClick={() => onRejectReturn(loan.id)}>✕ 却下</button>
-                  </>
-                ) : (
-                  <>
-                    {loan.status === "審査中" && <><button style={s.btn("success", "sm")} onClick={() => onApprove(loan.id)}>✓ 承認</button><button style={s.btn("danger", "sm")} onClick={() => onReject(loan.id)}>✕ 却下</button></>}
-                  </>
-                )}
+                <div style={{ ...s.row, gap: 8, flexShrink: 0 }}>
+                  {isReturn ? (
+                    <><button style={s.btn("success", "sm")} onClick={() => onApproveReturn(loan.id)}>✓ 返却承認</button><button style={s.btn("danger", "sm")} onClick={() => onRejectReturn(loan.id)}>✕ 却下</button></>
+                  ) : loan.status === "審査中" && (
+                    <><button style={s.btn("success", "sm")} onClick={() => onApprove(loan.id)}>✓ 承認</button><button style={s.btn("danger", "sm")} onClick={() => onReject(loan.id)}>✕ 却下</button></>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
     </div>
   );
 }
 
-// ── 却下理由モーダル ──────────────────────────────────────────
 function RejectModal({ onConfirm, onClose }) {
   const [reason, setReason] = useState("");
   return (
@@ -598,7 +611,6 @@ function RejectModal({ onConfirm, onClose }) {
   );
 }
 
-// ── マイ申請タブ ──────────────────────────────────────────────
 function MyRequestsTab({ loans, user }) {
   const myLoans = loans.filter(l => l.userName === user.name);
   const statusColor = { "審査中": C.gold, "承認済": C.green, "却下": C.red };
@@ -615,7 +627,7 @@ function MyRequestsTab({ loans, user }) {
               {loan.returned && <span style={s.tag(C.green)}>返却済</span>}
               {loan.returnStatus === "返却申請中" && <span style={{ background: C.purple + "22", color: C.purple, padding: "2px 10px", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>返却申請中</span>}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "4px 16px", fontSize: 13, color: C.gray700 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: "4px 16px", fontSize: 13, color: C.gray700 }}>
               <div><span style={{ color: C.gray500 }}>申請日: </span>{loan.requestedAt}</div>
               <div><span style={{ color: C.gray500 }}>返却予定: </span><b style={{ color: loan.dueDate < today() && !loan.returned && loan.status === "承認済" ? C.red : "inherit" }}>{loan.dueDate}</b></div>
               <div><span style={{ color: C.gray500 }}>使用目的: </span>{loan.purpose}</div>
@@ -628,7 +640,6 @@ function MyRequestsTab({ loans, user }) {
   );
 }
 
-// ── ダッシュボード ────────────────────────────────────────────
 function Dashboard({ items, loans }) {
   const counts = {
     total: items.filter(i => !i.hidden).length,
@@ -649,7 +660,7 @@ function Dashboard({ items, loans }) {
     { label: "期限超過", value: counts.overdue, color: C.red, icon: "🔴" },
   ];
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12 }}>
       {stats.map(st => (
         <div key={st.label} style={{ ...s.card, marginBottom: 0 }}>
           <div style={{ padding: "16px", textAlign: "center" }}>
@@ -663,7 +674,6 @@ function Dashboard({ items, loans }) {
   );
 }
 
-// ── お知らせ編集モーダル ──────────────────────────────────────
 function NoticeModal({ current, onSave, onClose }) {
   const [text, setText] = useState(current || "");
   return (
@@ -688,13 +698,14 @@ export default function App() {
   const [loans, setLoans] = useState([]);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [dataExists, setDataExists] = useState(null);
   const [tab, setTab] = useState("物品一覧");
   const [loanTarget, setLoanTarget] = useState(null);
   const [returnTarget, setReturnTarget] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
-  const [rejectReturnTarget, setRejectReturnTarget] = useState(null);
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [toast, setToast] = useState(null);
+  const restoreFileRef = useRef();
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "appData", "main"), (snap) => {
@@ -703,28 +714,38 @@ export default function App() {
         setItems(data.items || []);
         setLoans(data.loans || []);
         setNotice(data.notice || "");
+        setDataExists(true);
       } else {
-        saveToFirebase(INITIAL_ITEMS, [], "");
-        setItems(INITIAL_ITEMS); setLoans([]);
+        setDataExists(false);
       }
+      setLoading(false);
+    }, (error) => {
+      console.error("Firestore接続エラー:", error);
       setLoading(false);
     });
     return () => unsub();
   }, []);
 
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
-
   const save = async (newItems, newLoans, newNotice) => {
     await setDoc(doc(db, "appData", "main"), { items: newItems ?? items, loans: newLoans ?? loans, notice: newNotice ?? notice });
   };
 
   if (loading) return <div style={{ minHeight: "100vh", background: C.navy, display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ color: C.gold, fontSize: 18, fontWeight: 700 }}>⚔️ 読み込み中...</div></div>;
+
+  // データ未存在時の画面
+  if (dataExists === false) {
+    return <EmptyDataScreen
+      onInit={async () => { await saveDB([], [], ""); setDataExists(true); }}
+      onRestore={async (data) => { await saveDB(data.items || [], data.loans || [], data.notice || ""); setDataExists(true); showToast("バックアップから復元しました！"); }}
+    />;
+  }
+
   if (!user) return <LoginScreen onLogin={setUser} notice={notice} />;
 
   const tabs = user.role === "管理者" ? ["物品一覧", "申請管理", "ダッシュボード"] : ["物品一覧", "マイ申請"];
   const pendingCount = loans.filter(l => l.status === "審査中").length + loans.filter(l => l.returnStatus === "返却申請中").length;
 
-  // 貸出申請送信
   const handleSubmitLoan = async (loan) => {
     const newLoans = [loan, ...loans];
     const newItems = items.map(i => i.id === loan.itemId ? { ...i, status: "申請中" } : i);
@@ -734,7 +755,6 @@ export default function App() {
     setTab("マイ申請");
   };
 
-  // 貸出承認
   const handleApprove = async (loanId) => {
     const loan = loans.find(l => l.id === loanId);
     const newLoans = loans.map(l => l.id === loanId ? { ...l, status: "承認済" } : l);
@@ -743,7 +763,6 @@ export default function App() {
     showToast("申請を承認しました。");
   };
 
-  // 貸出却下
   const handleRejectConfirm = async (reason) => {
     const loan = loans.find(l => l.id === rejectTarget);
     const newLoans = loans.map(l => l.id === rejectTarget ? { ...l, status: "却下", rejectedReason: reason } : l);
@@ -753,7 +772,6 @@ export default function App() {
     showToast("申請を却下しました。", "error");
   };
 
-  // 返却申請送信（一般ユーザー）
   const handleSubmitReturn = async ({ loanId, itemId, itemName, userName, returnMessage, returnRequestedAt }) => {
     const newLoans = loans.map(l => l.id === loanId ? { ...l, returnStatus: "返却申請中", returnMessage, returnRequestedAt, userName } : l);
     const newItems = items.map(i => i.id === itemId ? { ...i, status: "返却申請中" } : i);
@@ -762,7 +780,6 @@ export default function App() {
     showToast("返却申請を送信しました。管理者の承認をお待ちください。");
   };
 
-  // 返却承認（管理者）
   const handleApproveReturn = async (loanId) => {
     const loan = loans.find(l => l.id === loanId);
     const newLoans = loans.map(l => l.id === loanId ? { ...l, returned: true, returnStatus: "返却承認済" } : l);
@@ -771,17 +788,14 @@ export default function App() {
     showToast("返却を承認しました。");
   };
 
-  // 返却申請却下（管理者）
   const handleRejectReturn = async (loanId) => {
     const loan = loans.find(l => l.id === loanId);
     const newLoans = loans.map(l => l.id === loanId ? { ...l, returnStatus: null } : l);
     const newItems = items.map(i => i.id === loan?.itemId ? { ...i, status: "貸出中" } : i);
     await save(newItems, newLoans);
-    setRejectReturnTarget(null);
     showToast("返却申請を却下しました。", "error");
   };
 
-  // 状態変更（管理者）
   const handleChangeStatus = async (itemId, newStatus) => {
     const prevItem = items.find(i => i.id === itemId);
     const newItems = items.map(i => i.id === itemId ? { ...i, status: newStatus } : i);
@@ -801,50 +815,18 @@ export default function App() {
     await save(newItems, newLoans);
   };
 
-  const handleChangeNote = async (itemId, note) => {
-    const newItems = items.map(i => i.id === itemId ? { ...i, note } : i);
-    await save(newItems, loans);
-    showToast("備考を更新しました。");
-  };
-
-  const handleChangeName = async (itemId, name) => {
-    const newItems = items.map(i => i.id === itemId ? { ...i, name } : i);
-    await save(newItems, loans);
-    showToast("名称を更新しました。");
-  };
-
-  const handleDeleteItem = async (itemId) => {
-    const newItems = items.filter(i => i.id !== itemId);
-    await save(newItems, loans);
-    showToast("物品を削除しました。", "error");
-  };
-
-  const handleToggleHidden = async (itemId) => {
-    const newItems = items.map(i => i.id === itemId ? { ...i, hidden: !i.hidden } : i);
-    await save(newItems, loans);
-    const item = items.find(i => i.id === itemId);
-    showToast(`${itemId} を${item?.hidden ? "表示" : "非表示"}にしました。`);
-  };
-
-  const handleAddItem = async (item) => {
-    const newItems = [...items, item];
-    await save(newItems, loans);
-    showToast(`${item.name} を追加しました。`);
-  };
-
+  const handleChangeNote = async (itemId, note) => { const ni = items.map(i => i.id === itemId ? { ...i, note } : i); await save(ni, loans); showToast("備考を更新しました。"); };
+  const handleChangeName = async (itemId, name) => { const ni = items.map(i => i.id === itemId ? { ...i, name } : i); await save(ni, loans); showToast("名称を更新しました。"); };
+  const handleDeleteItem = async (itemId) => { const ni = items.filter(i => i.id !== itemId); await save(ni, loans); showToast("物品を削除しました。", "error"); };
+  const handleToggleHidden = async (itemId) => { const ni = items.map(i => i.id === itemId ? { ...i, hidden: !i.hidden } : i); await save(ni, loans); const item = items.find(i => i.id === itemId); showToast(`${itemId} を${item?.hidden ? "表示" : "非表示"}にしました。`); };
+  const handleAddItem = async (item) => { const ni = [...items, item]; await save(ni, loans); showToast(`${item.name} を追加しました。`); };
   const handleImportXlsx = async (rows) => {
     const newItems = rows.map(r => ({ id: String(r["ID"] || r["id"] || "").trim(), name: String(r["名称"] || r["name"] || "").trim(), category: String(r["種別"] || r["category"] || "").trim(), note: String(r["備考"] || r["note"] || "").trim(), status: "利用可能", hidden: false })).filter(i => i.id && i.name);
     const deduped = [...items, ...newItems.filter(n => !items.find(ex => ex.id === n.id))];
     await save(deduped, loans);
     showToast(`${newItems.length} 件の物品をインポートしました。`);
   };
-
-  const handleSaveNotice = async (text) => {
-    await save(items, loans, text);
-    setNotice(text);
-    setShowNoticeModal(false);
-    showToast("お知らせを更新しました。");
-  };
+  const handleSaveNotice = async (text) => { await save(items, loans, text); setShowNoticeModal(false); showToast("お知らせを更新しました。"); };
 
   return (
     <div style={s.app}>
@@ -853,8 +835,13 @@ export default function App() {
           <h1 style={s.headerTitle}>⚔️ 武道具管理システム</h1>
           <div style={s.headerSub}>Bugu Management System</div>
         </div>
-        <div style={s.row}>
-          {user.role === "管理者" && <button style={{ ...s.btn("gold", "sm") }} onClick={() => setShowNoticeModal(true)}>📢 お知らせ編集</button>}
+        <div style={{ ...s.row, flexWrap: "wrap", gap: 8 }}>
+          {user.role === "管理者" && (
+            <>
+              <button style={s.btn("gold", "sm")} onClick={() => setShowNoticeModal(true)}>📢 お知らせ</button>
+              <button style={{ ...s.btn("outline", "sm"), color: C.green, borderColor: C.green }} onClick={() => downloadBackup(items, loans, notice)}>💾 バックアップ</button>
+            </>
+          )}
           <span style={{ color: "rgba(255,255,255,0.8)", fontSize: 13 }}>{user.name}</span>
           <span style={s.badge(user.role)}>{user.role}</span>
           <button style={{ ...s.btn("outline", "sm"), color: "rgba(255,255,255,0.7)", borderColor: "rgba(255,255,255,0.3)" }} onClick={() => { setUser(null); setTab("物品一覧"); }}>ログアウト</button>
@@ -872,13 +859,14 @@ export default function App() {
         {toast && <div style={{ ...s.alert(toast.type), position: "fixed", top: 80, right: 20, zIndex: 2000, minWidth: 280, boxShadow: "0 4px 16px rgba(0,0,0,0.15)" }}>{toast.msg}</div>}
         {tab === "ダッシュボード" && <Dashboard items={items} loans={loans} />}
         {tab === "物品一覧" && <ItemsTab items={items} loans={loans} user={user} onRequestLoan={setLoanTarget} onChangeStatus={handleChangeStatus} onChangeNote={handleChangeNote} onChangeName={handleChangeName} onDeleteItem={handleDeleteItem} onToggleHidden={handleToggleHidden} onAddItem={handleAddItem} onImportXlsx={handleImportXlsx} onRequestReturn={(item, loan) => setReturnTarget({ item, loan })} />}
-        {tab === "申請管理" && user.role === "管理者" && <RequestsTab loans={loans} onApprove={handleApprove} onReject={setRejectTarget} onApproveReturn={handleApproveReturn} onRejectReturn={(id) => { setRejectReturnTarget(id); handleRejectReturn(id); }} user={user} />}
+        {tab === "申請管理" && user.role === "管理者" && <RequestsTab loans={loans} onApprove={handleApprove} onReject={setRejectTarget} onApproveReturn={handleApproveReturn} onRejectReturn={handleRejectReturn} />}
         {tab === "マイ申請" && user.role !== "管理者" && <MyRequestsTab loans={loans} user={user} />}
       </main>
       {loanTarget && <LoanRequestModal item={loanTarget} user={user} onSubmit={handleSubmitLoan} onClose={() => setLoanTarget(null)} />}
       {returnTarget && <ReturnRequestModal item={returnTarget.item} loan={returnTarget.loan} user={user} onSubmit={handleSubmitReturn} onClose={() => setReturnTarget(null)} />}
       {rejectTarget && <RejectModal onConfirm={handleRejectConfirm} onClose={() => setRejectTarget(null)} />}
       {showNoticeModal && <NoticeModal current={notice} onSave={handleSaveNotice} onClose={() => setShowNoticeModal(false)} />}
+      <input ref={restoreFileRef} type="file" accept=".json" style={{ display: "none" }} />
     </div>
   );
 }
